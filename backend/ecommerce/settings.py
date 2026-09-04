@@ -51,6 +51,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -79,12 +80,27 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "ecommerce.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# --- Database ---
+# If DJANGO_DB_NAME is set (in .env), use PostgreSQL. Otherwise fall back to
+# the local SQLite file so this still runs with zero extra setup.
+if os.environ.get("DJANGO_DB_NAME"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DJANGO_DB_NAME"),
+            "USER": os.environ.get("DJANGO_DB_USER", "postgres"),
+            "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", ""),
+            "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
+            "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_USER_MODEL = "store.User"
 
@@ -101,6 +117,12 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -128,9 +150,6 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
-# In production, set DJANGO_CORS_ORIGINS to a comma-separated list of your
-# real frontend URL(s), e.g. "https://yourshop.com". Locally, it defaults to
-# the Vite dev server so the storefront can talk to the API.
 _cors_origins = os.environ.get("DJANGO_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 if _cors_origins.strip() == "*":
     CORS_ALLOW_ALL_ORIGINS = True
@@ -141,7 +160,6 @@ SHIPPING_FLAT_RATE = 5.99
 FREE_SHIPPING_THRESHOLD = 75.00
 LOW_STOCK_THRESHOLD = 5
 
-# Extra hardening that only kicks in once DEBUG=False (i.e. in production).
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
