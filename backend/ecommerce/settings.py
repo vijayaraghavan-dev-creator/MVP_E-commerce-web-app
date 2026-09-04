@@ -1,16 +1,39 @@
 """
 Django settings for the e-commerce MVP.
 """
+import os
 from pathlib import Path
 from datetime import timedelta
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # reads a local .env file if present (never commit that file)
+except ImportError:
+    pass  # python-dotenv not installed yet — env vars can still be set manually
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "dev-secret-key-change-this-in-production"
 
-DEBUG = True
+def env_bool(name, default=False):
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
 
-ALLOWED_HOSTS = ["*"]
+
+# SECURITY WARNING: keep the real secret key out of source control.
+# Locally, put it in a .env file (see .env.example). In production, set it
+# as a real environment variable on your host/hosting platform.
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "dev-only-insecure-key-CHANGE-ME-set-DJANGO_SECRET_KEY-env-var",
+)
+
+DEBUG = env_bool("DJANGO_DEBUG", default=True)
+
+ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -90,15 +113,36 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.AllowAny",
     ),
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "30/minute",
+        "user": "120/minute",
+    },
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+# In production, set DJANGO_CORS_ORIGINS to a comma-separated list of your
+# real frontend URL(s), e.g. "https://yourshop.com". Locally, it defaults to
+# the Vite dev server so the storefront can talk to the API.
+_cors_origins = os.environ.get("DJANGO_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+if _cors_origins.strip() == "*":
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 SHIPPING_FLAT_RATE = 5.99
 FREE_SHIPPING_THRESHOLD = 75.00
 LOW_STOCK_THRESHOLD = 5
+
+# Extra hardening that only kicks in once DEBUG=False (i.e. in production).
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
